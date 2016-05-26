@@ -29,6 +29,7 @@ function heatmap(width, height){
     this.zoom_x_max = null;
     this.zoom_y_min = null;
     this.zoom_y_max = null;
+    this.qdsStore = [];
     // drawing
     this.topGutter = 0.1*height;
     this.rightGutter = 0.2*width;
@@ -67,7 +68,7 @@ function heatmap(width, height){
     ////////////////////////
     this.drawData = function(){
         // paint whatever is in this._raw to the heatmap.
-        var i, j, 
+        var i, j, index,
             colorIndex, red, green, blue, color,
             x0, y0, poly, cell;
 
@@ -84,6 +85,12 @@ function heatmap(width, height){
                 // what color should this cell be?
                 color = this.chooseColor(this._raw[i][j]);
 
+                // keep recycling qdshape objects
+                index = i*(this.xmax - this.xmin) + j;
+                if(this.qdsStore.length <= index){
+                    this.qdsStore.push(new qdshape())
+                }
+
                 // make and add the cell
                 poly = new Path2D();
                 x0 = this.leftGutter + (j-this.xmin)*this.cellWidth;
@@ -93,16 +100,11 @@ function heatmap(width, height){
                 poly.lineTo(x0+this.cellWidth, y0-this.cellHeight);
                 poly.lineTo(x0,y0-this.cellHeight);
                 poly.closePath();
+                this.qdsStore[index].path = poly;
+                this.qdsStore[index].id = `cell${i}${j}`;
+                this.qdsStore[index].fillStyle = color;
 
-                this.layers[0].add(
-                    new qdshape(
-                        poly, 
-                        {
-                            id: `cell${i}${j}`,
-                            fillStyle: color
-                        }
-                    )
-                ) 
+                this.layers[0].add(this.qdsStore[index]); 
             }   
         }
 

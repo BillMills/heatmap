@@ -5,19 +5,25 @@
     </head>
 
     <body>
+        <button onclick='regen()'>Go Again</button>
+
         <script>
-            var i, j, raw = [], hm = new heatmap(500,500);
+            var hm = new heatmap(500,500);
             document.body.appendChild(hm.qd.canvas);
 
-            for(i=0; i<256; i++){
-                raw.push([]);
-                for(j=0;j<256;j++){
-                    raw[i][j] = Math.random()
+            function regen(){
+                var i, j, raw = []
+                for(i=0; i<128; i++){
+                    raw.push([]);
+                    for(j=0;j<128;j++){
+                        raw[i][j] = Math.random()
+                    }
                 }
+                hm.raw = raw;
+                hm.drawData();
             }
 
-            hm.raw = raw;
-            hm.drawData();
+            regen();
         </script>
     </body>
 </html>
