@@ -12,20 +12,27 @@ function heatmap(width, height){
     this.qd = new quickdraw(width, height);
     this.layers = [];                           // layers, ordered back to front
     this.layers.push(new qdlayer('data'));
+    this.layers.push(new qdlayer('annotation'));
     this.layers.push(new qdlayer('overlay'));
     this.layers.push(new qdlayer('scale'));
     // data and parameterization
-    this.raw = [[0,1,2,3], [4,5,6,7], [8,9,10,11], [12,13,14,15]];
-    this.xmin = 0;
-    this.xmax = 4;
-    this.ymin = 0;
-    this.ymax = 4;
-    this.zmin = 0;
-    this.zmax = 15;
+    this._raw = null;
+    this.xmin = null;
+    this.xmax = null;
+    this.ymin = null;
+    this.ymax = null;
+    this.zmin = null;
+    this.zmax = null;
+    this.zoom_x_coord_min = null;
+    this.zoom_y_coord_min = null;
+    this.zoom_x_min = null;
+    this.zoom_x_max = null;
+    this.zoom_y_min = null;
+    this.zoom_y_max = null;
     // drawing
     this.topGutter = 0.1*height;
     this.rightGutter = 0.2*width;
-    this.bottomGutter = 0.1*height;
+    this.bottomGutter = 0.2*height;
     this.leftGutter = 0.1*width;
     this.plotWidth = width - this.leftGutter - this.rightGutter;
     this.plotHeight = height - this.topGutter - this.bottomGutter;
@@ -34,6 +41,20 @@ function heatmap(width, height){
     this.scaleWidth = this.rightGutter*0.3;
     this.scalePosition = this.rightGutter*0.25;
     this.scaleGradations = 32;
+
+    // special setter behavior
+    Object.defineProperty(this, 'raw', 
+        {
+            set:function(variableName, setValue){
+                    this[variableName] = setValue;
+
+                    this.xmin = 0;
+                    this.xmax = setValue[0].length;
+                    this.ymin = 0;
+                    this.ymax = setValue.length;
+            
+                }.bind(this, '_raw')
+    });
 
     // set up quickdraw scene:
     for(i=0; i<this.layers.length; i++){
@@ -45,28 +66,28 @@ function heatmap(width, height){
     // member functions
     ////////////////////////
     this.drawData = function(){
-        // paint whatever is in this.raw to the heatmap.
+        // paint whatever is in this._raw to the heatmap.
         var i, j, 
             colorIndex, red, green, blue, color,
             x0, y0, poly, cell;
 
         // rescale cells
         this.chooseCellSize();
-
         this.drawScale();
 
-        // drop old cells
+        // drop old cells & overlays
         this.layers[0].members = [];
+        this.layers[2].members = [];
 
-        for(i=0; i<this.raw.length; i++){
-            for(j=0; j<this.raw[i].length; j++){
+        for(i=this.ymin; i<this.ymax; i++){
+            for(j=this.xmin; j<this.xmax; j++){
                 // what color should this cell be?
-                color = this.chooseColor(this.raw[i][j]);
+                color = this.chooseColor(this._raw[i][j]);
 
                 // make and add the cell
                 poly = new Path2D();
-                x0 = this.leftGutter + j*this.cellWidth;
-                y0 = this.height-this.bottomGutter - i*this.cellHeight
+                x0 = this.leftGutter + (j-this.xmin)*this.cellWidth;
+                y0 = this.height-this.bottomGutter - (i-this.ymin)*this.cellHeight
                 poly.moveTo(x0,y0);
                 poly.lineTo(x0+this.cellWidth,y0);
                 poly.lineTo(x0+this.cellWidth, y0-this.cellHeight);
@@ -91,8 +112,9 @@ function heatmap(width, height){
     this.chooseCellSize = function(){
         // decide on a sane size for cells
         // width and height maintain the proportions of number of cells in x to number of cells in y
-        this.cellWidth = Math.min(this.plotWidth / (this.xmax - this.xmin), (this.plotHeight / (this.ymax - this.ymin))*this.raw[0].length/this.raw.length )
-        this.cellHeight = this.cellWidth * this.raw.length/this.raw[0].length;
+
+        this.cellWidth = this.plotWidth / (this.xmax - this.xmin);
+        this.cellHeight = this.plotHeight / (this.ymax - this.ymin)
     }
 
     this.chooseColor = function(z){
@@ -116,8 +138,14 @@ function heatmap(width, height){
         // draw the heat scale.
 
         var i,
-            poly, x0, y0, color, cell = this.cellHeight*this.ymax/this.scaleGradations,
+            poly, x0, y0, color, cell = this.cellHeight*(this.ymax-this.ymin)/this.scaleGradations,
             ticks, text;
+
+        // recompute z range
+        this.zrange();
+
+        // dump old scale layer
+        this.layers[3].members = [];
 
         // draw color cells
         for(i=0; i<this.scaleGradations; i++){
@@ -129,9 +157,9 @@ function heatmap(width, height){
             poly.lineTo(x0+this.scaleWidth, y0-cell);
             poly.lineTo(x0,y0-cell);
             poly.closePath();
-            color = this.chooseColor( (this.zmax - this.zmin)/this.scaleGradations*i );
+            color = this.chooseColor( (this.zmax - this.zmin)/this.scaleGradations*i + this.zmin );
 
-            this.layers[2].add(
+            this.layers[3].add(
                 new qdshape(
                     poly, 
                     {
@@ -147,21 +175,21 @@ function heatmap(width, height){
         for(i=0; i<ticks.length; i++){
             text = new qdtext(ticks[i], {
                 x: this.width - this.rightGutter + this.scalePosition + this.scaleWidth + 6,
-                y: this.height - this.bottomGutter - this.cellHeight*this.ymax*(ticks[i]-this.zmin)/(this.zmax-this.zmin) + 6
+                y: this.height - this.bottomGutter - this.cellHeight*(this.ymax-this.ymin)*(ticks[i]-this.zmin)/(this.zmax-this.zmin) + 6
             });
 
-            this.layers[2].add(text);
+            this.layers[3].add(text);
         }
 
         // add x axis ticks
         ticks = this.chooseTicks(this.xmin, this.xmax);
         for(i=0; i<ticks.length; i++){
             text = new qdtext(ticks[i], {
-                x: this.leftGutter + this.cellWidth*this.xmax*(ticks[i]-this.xmin)/(this.xmax-this.xmin) - 6,
+                x: this.leftGutter + this.cellWidth*(ticks[i]-this.xmin) - 6,
                 y: this.height - this.bottomGutter + 18
             });
 
-            this.layers[2].add(text);
+            this.layers[3].add(text);
         }      
 
         // add y axis ticks
@@ -169,12 +197,12 @@ function heatmap(width, height){
         for(i=0; i<ticks.length; i++){
             text = new qdtext(ticks[i], {
                 x: this.leftGutter - 12,
-                y: this.height - this.bottomGutter - this.cellHeight*this.ymax*(ticks[i]-this.ymin)/(this.ymax-this.ymin) + 6
+                y: this.height - this.bottomGutter - this.cellHeight*(ticks[i]-this.ymin) + 6
             });
 
             text.x = this.leftGutter - 12 - text.getTextMetric().width;
 
-            this.layers[2].add(text);
+            this.layers[3].add(text);
         }        
     }
 
@@ -213,6 +241,163 @@ function heatmap(width, height){
         return ticks;
     }
 
+    this.coords2cell = function(x,y){
+        //convert the x,y canvas coordinates into a cell
+
+        var cell_x = Math.floor((x - this.leftGutter)/this.cellWidth),
+            cell_y = Math.floor((-1*y+this.height - this.bottomGutter)/this.cellHeight);
+
+        return {x:cell_x, y:cell_y};
+    }
+
+    this.zoom = function(xmin, ymin, xmax, ymax){
+        // zoom tp the specified ranges
+
+        this.xmin = xmin;
+        this.ymin = ymin;
+        this.xmax = xmax;
+        this.ymax = ymax;
+
+        this.drawData();
+    }
+
+    this.zrange = function(){
+        // set an appropriate z range based on whatever is currently on display
+
+        var max = this._raw.map(function(row){
+            return Math.max.apply(null, row.slice(this.xmin, this.xmax))
+        }.bind(this)),
+            min = this._raw.map(function(row){
+            return Math.min.apply(null, row.slice(this.xmin, this.xmax))
+        }.bind(this))
+
+        this.zmax = Math.max.apply(null, max.slice(this.ymin, this.ymax));
+        this.zmin = Math.min.apply(null, min.slice(this.ymin, this.ymax));
+    }
+
+    ////////////////////////
+    // event listeners
+    ////////////////////////
+
+    this.mousedown = function(evt){
+        // start a drag motion for drag-and-zoom
+        var bounds = this.qd.canvas.getBoundingClientRect(),
+            cell = this.coords2cell(evt.clientX - bounds.left, evt.clientY - bounds.top)
+
+        this.zoom_x_coord_min = evt.clientX - bounds.left;
+        this.zoom_y_coord_min = evt.clientY - bounds.top;
+        this.zoom_x_min = cell.x;
+        this.zoom_y_min = cell.y;
+    }
+
+    this.mouseup = function(evt){
+        // finish a drag motion for drag-and-zoom
+        var bounds = this.qd.canvas.getBoundingClientRect(),
+            cell = this.coords2cell(evt.clientX - bounds.left, evt.clientY - bounds.top),
+            buffer;
+
+        this.zoom_x_max = cell.x;
+        this.zoom_y_max = cell.y;
+
+        // clicked without drag, abandon ship
+        if((this.zoom_x_min === this.zoom_x_max && this.zoom_y_min === this.zoom_y_max) || this.zoom_x_min==null || this.zoom_y_min==null){
+            this.abandonZoom();
+            this.qd.render();
+            return;
+        }
+
+        // did the user drag backwards?
+        if(this.zoom_x_min > this.zoom_x_max){
+            buffer = this.zoom_x_min;
+            this.zoom_x_min = this.zoom_x_max;
+            this.zoom_x_max = buffer;
+        }
+        if(this.zoom_y_min > this.zoom_y_max){
+            buffer = this.zoom_y_min;
+            this.zoom_y_min = this.zoom_y_max;
+            this.zoom_y_max = buffer;
+        }
+
+        // stick to bins that actually exist:
+        if(this.zoom_x_min < 0) this.zoom_x_min = 0;
+        if(this.zoom_x_max > this._raw[0].length-1) this.zoom_x_max = this._raw[0].length-1;
+        if(this.zoom_y_min < 0) this.zoom_y_min = 0;
+        if(this.zoom_y_max > this._raw.length-1) this.zoom_y_max = this._raw.length-1;
+
+        this.zoom(this.zoom_x_min, this.zoom_y_min, this.zoom_x_max+1, this.zoom_y_max+1);
+
+        this.abandonZoom();
+    }    
+
+    this.mousemove = function(evt){
+        // highlight box when zoom-dragging
+
+        var bounds = this.qd.canvas.getBoundingClientRect(),
+            x0, y0, width, height,
+            poly;
+
+        // bail out if we're not in the middle of a zoom
+        if(this.zoom_x_coord_min == null || this.zoom_y_coord_min == null) return;
+
+        // draw a highlight square on the overlay layer
+        x0 = this.zoom_x_coord_min;
+        y0 = this.zoom_y_coord_min;
+        width = evt.clientX - bounds.left - this.zoom_x_coord_min;
+        height = evt.clientY - bounds.top - this.zoom_y_coord_min;
+
+        this.layers[2].members = [];
+        poly = new Path2D();
+        poly.moveTo(x0,y0);
+        poly.lineTo(x0+width,y0);
+        poly.lineTo(x0+width, y0+height);
+        poly.lineTo(x0,y0+height);
+        poly.closePath();
+
+        this.layers[2].add(
+            new qdshape(
+                poly, 
+                {
+                    id: 'zoomHighlight',
+                    fillStyle: 'rgba(142, 68, 173, 0.5)'
+                }
+            )
+        ) 
+
+        this.qd.render();
+    }
+
+    this.mouseout = function(evt){
+        // abandon any zoom in progress
+
+        this.abandonZoom();
+        this.qd.render();
+    }
+
+    this.dblclick = function(evt){
+        // unzoom
+
+        this.abandonZoom();
+        this.zoom(0,0,this._raw[0].length, this._raw.length);  
+    }
+
+    this.abandonZoom = function(){
+        // abort a drag-zoom in progress
+
+        this.zoom_x_min = null;
+        this.zoom_x_max = null;
+        this.zoom_y_min = null;
+        this.zoom_y_max = null;
+        this.zoom_x_coord_min = null;
+        this.zoom_y_coord_min = null;
+
+        this.layers[2].members = [];    
+    }
+
+    this.qd.canvas.onmousedown = this.mousedown.bind(this);
+    this.qd.canvas.onmouseup = this.mouseup.bind(this);
+    this.qd.canvas.onmousemove = this.mousemove.bind(this);
+    this.qd.canvas.onmouseout = this.mouseout.bind(this);
+    this.qd.canvas.ondblclick = this.dblclick.bind(this);
 
     this.colorscales = {
         viridis: [ // thanks https://github.com/sjmgarnier/viridis
