@@ -307,9 +307,9 @@ function qdlayer(name){
         this.members.push(shape);
         this.needsUpdate = true;
 
-        // enforce z ordering
-        this.members.sort(function(a, b) {
-            return a._z - b._z;
-        });
+        // // enforce z ordering
+        // this.members.sort(function(a, b) {
+        //     return a._z - b._z;
+        // });
     }
 }
