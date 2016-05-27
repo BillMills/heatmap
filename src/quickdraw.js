@@ -160,19 +160,19 @@ function qdshape(path, parameters){
 
 
     // default parameters
-    this._id = parameters ? parameters.id : null;
+    this._id = parameters ? parameters.id : 'id';
     this._path = path;
-    this._lineWidth = parameters ? parameters.lineWidth || 1 : null;
-    this._strokeStyle = parameters ? parameters.strokeStyle || '#000000' : null;
-    this._fillStyle = parameters ? parameters.fillStyle || '#000000' : null;
-    this._touchable = parameters ? (parameters.hasOwnProperty('touchable') ? parameters.touchable : true) : null;
-    this._x = parameters ? parameters.x || 0 : null;
-    this._y = parameters ? parameters.y || 0 : null;
-    this._z = parameters ? parameters.z || 1 : null;
-    this._internalRotation = parameters ? parameters.internalRotation || 0 : null;
-    this._fillPriority = parameters ? parameters.fillPriority || 'color' : null;
-    this._fillPatternImage = parameters ? parameters.fillPatternImage || null : null;
-    this.parentLayer = null;
+    this._lineWidth = parameters ? (parameters.lineWidth || 1) : 1;
+    this._strokeStyle = parameters ? (parameters.strokeStyle || '#000000') : '#000000';
+    this._fillStyle = parameters ? (parameters.fillStyle || '#000000') : '#000000';
+    this._touchable = parameters ? (parameters.hasOwnProperty('touchable') ? parameters.touchable : true) : true;
+    this._x = parameters ? (parameters.x || 0) : 0;
+    this._y = parameters ? (parameters.y || 0) : 0;
+    this._z = parameters ? (parameters.z || 1) : 1;
+    this._internalRotation = parameters ? (parameters.internalRotation || 0) : 0;
+    this._fillPriority = parameters ? (parameters.fillPriority || 'color') : 'color';
+    this._fillPatternImage = parameters ? (parameters.fillPatternImage || null) : null;
+    this.parentLayer = {};
 
     // dummy interaction callbacks
     this._click = function(){return 0};
@@ -183,8 +183,7 @@ function qdshape(path, parameters){
     // setters flag layers for redraw
     propertySetter = function(variableName, setValue){
         this[variableName] = setValue;
-        if(this.parentLayer)
-            this.parentLayer.needsUpdate = true;
+        this.parentLayer.needsUpdate = true;
     };
 
     // generic setters
