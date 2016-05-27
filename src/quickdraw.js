@@ -172,7 +172,7 @@ function qdshape(path, parameters){
     this._internalRotation = parameters ? (parameters.internalRotation || 0) : 0;
     this._fillPriority = parameters ? (parameters.fillPriority || 'color') : 'color';
     this._fillPatternImage = parameters ? (parameters.fillPatternImage || null) : null;
-    this.parentLayer = {};
+    this.parentLayer = null;
 
     // dummy interaction callbacks
     this._click = function(){return 0};
@@ -183,7 +183,8 @@ function qdshape(path, parameters){
     // setters flag layers for redraw
     propertySetter = function(variableName, setValue){
         this[variableName] = setValue;
-        this.parentLayer.needsUpdate = true;
+        if(this.parentLayer != null)
+            this.parentLayer.needsUpdate = true;
     };
 
     // generic setters
