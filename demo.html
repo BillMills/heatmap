@@ -1,6 +1,5 @@
 <html>
     <head>
-        <script src='src/quickdraw.js' type="text/javascript"></script>
         <script src='src/heatmap.js' type="text/javascript"></script>
     </head>
 
@@ -9,17 +8,26 @@
 
         <script>
             var hm = new heatmap(500,500);
-            document.body.appendChild(hm.qd.canvas);
+            document.body.appendChild(hm.canvas);
+
+            var i,j, n=512, basedata = []
+            for(i=0; i<n; i++){
+                basedata.push([]);
+                for(j=0;j<n;j++){
+                    basedata[i][j] = Math.random();
+                }
+            }
 
             function regen(){
-                var i, j, raw = []
-                for(i=0; i<128; i++){
-                    raw.push([]);
-                    for(j=0;j<128;j++){
-                        raw[i][j] = Math.random()
+                var i, j;
+                for(i=0; i<n; i++){
+                    for(j=0;j<n;j++){
+                        if(Math.random() < 0.1){
+                            basedata[i][j] = Math.random();
+                        }
                     }
                 }
-                hm.raw = raw;
+                hm.raw = JSON.parse(JSON.stringify(basedata));
                 hm.drawData();
             }
 

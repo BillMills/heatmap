@@ -9,12 +9,15 @@ function heatmap(width, height){
     // layout & quickdraw items
     this.width = width;                         // in px
     this.height = height;                       // in px
-    this.qd = new quickdraw(width, height);
     this.layers = [];                           // layers, ordered back to front
-    this.layers.push(new qdlayer('data'));
-    this.layers.push(new qdlayer('annotation'));
-    this.layers.push(new qdlayer('overlay'));
-    this.layers.push(new qdlayer('scale'));
+    this.canvas = document.createElement('canvas') // main canvas for display
+    this.canvas.width = this.width;
+    this.canvas.height = this.height;
+    // hidden cnavases for compositing
+    this.layers.push(document.createElement('canvas'));  //data
+    this.layers.push(document.createElement('canvas'));  //annotation
+    this.layers.push(document.createElement('canvas'));  //overlay
+    this.layers.push(document.createElement('canvas'));  //scale
     // data and parameterization
     this._raw = null;
     this.xmin = null;
@@ -29,7 +32,6 @@ function heatmap(width, height){
     this.zoom_x_max = null;
     this.zoom_y_min = null;
     this.zoom_y_max = null;
-    this.qdsStore = [];
     // drawing
     this.topGutter = 0.1*height;
     this.rightGutter = 0.2*width;
@@ -46,21 +48,29 @@ function heatmap(width, height){
     // special setter behavior
     Object.defineProperty(this, 'raw', 
         {
-            set:function(variableName, setValue){
-                    this[variableName] = setValue;
+            set:function(setValue){
+                    this._oldraw = this._raw
 
-                    this.xmin = 0;
-                    this.xmax = setValue[0].length;
-                    this.ymin = 0;
-                    this.ymax = setValue.length;
-            
-                }.bind(this, '_raw')
+                    this._raw = setValue;
+
+                    if(this.ymax == null)
+                        this.dblclick() //'unzooms' to initialize ranges when data first loaded
+                    // this.xmin = 0;
+                    // this.xmax = setValue[0].length;
+                    // this.ymin = 0;
+                    // this.ymax = setValue.length;
+
+                    this.drawScale();
+                }.bind(this)
     });
 
-    // set up quickdraw scene:
-    for(i=0; i<this.layers.length; i++){
-        this.layers[i].z = i;
-        this.qd.add(this.layers[i]);
+    // size canvases, make pointers to contexts
+    this.ctx = [];
+    for(i=0;i<this.layers.length; i++){
+        this.layers[i].width = this.width;
+        this.layers[i].height = this.height;
+
+        this.ctx.push(this.layers[i].getContext('2d'));
     }
 
     ////////////////////////
@@ -74,41 +84,40 @@ function heatmap(width, height){
 
         // rescale cells
         this.chooseCellSize();
-        this.drawScale();
 
         // drop old cells & overlays
-        this.layers[0].members = [];
-        this.layers[2].members = [];
+        //this.ctx[0].clearRect(0,0,this.width,this.height);
+        this.ctx[2].clearRect(0,0,this.width,this.height);
 
         for(i=this.ymin; i<this.ymax; i++){
             for(j=this.xmin; j<this.xmax; j++){
+                //abort if nothing has changed
+                if(this._oldraw && (this._oldraw[i][j] === this._raw[i][j]) ) continue;
+
                 // what color should this cell be?
                 color = this.chooseColor(this._raw[i][j]);
 
-                // keep recycling qdshape objects
-                index = i*(this.xmax - this.xmin) + j;
-                if(this.qdsStore.length <= index){
-                    this.qdsStore.push(new qdshape())
-                }
-
                 // make and add the cell
-                poly = new Path2D();
+                this.ctx[0].fillStyle = color;
                 x0 = this.leftGutter + (j-this.xmin)*this.cellWidth;
-                y0 = this.height-this.bottomGutter - (i-this.ymin)*this.cellHeight
-                poly.moveTo(x0,y0);
-                poly.lineTo(x0+this.cellWidth,y0);
-                poly.lineTo(x0+this.cellWidth, y0-this.cellHeight);
-                poly.lineTo(x0,y0-this.cellHeight);
-                poly.closePath();
-                this.qdsStore[index].path = poly;
-                this.qdsStore[index].id = `cell${i}${j}`;
-                this.qdsStore[index].fillStyle = color;
-
-                this.layers[0].add(this.qdsStore[index]); 
+                y0 = this.height-this.bottomGutter - (i-this.ymin + 1)*this.cellHeight;
+                this.ctx[0].fillRect(x0,y0,this.cellWidth,this.cellHeight);
             }   
         }
 
-        this.qd.render();
+        this.render();
+    }
+
+    this.render = function(){
+        //composite layers and display
+
+        var i,
+            ctx = this.canvas.getContext('2d');
+
+        ctx.clearRect(0,0,this.width,this.height);
+        for(i=0; i<this.layers.length; i++){
+            ctx.drawImage(this.layers[i], 0, 0);
+        }
     }
 
     this.chooseCellSize = function(){
@@ -140,71 +149,48 @@ function heatmap(width, height){
         // draw the heat scale.
 
         var i,
-            poly, x0, y0, color, cell = this.cellHeight*(this.ymax-this.ymin)/this.scaleGradations,
+            poly, x0, y0, color, cell,
             ticks, text;
 
+        // rescale cells
+        this.chooseCellSize();
         // recompute z range
         this.zrange();
+        cell = this.cellHeight*(this.ymax-this.ymin)/this.scaleGradations;
 
         // dump old scale layer
-        this.layers[3].members = [];
+        this.ctx[3].clearRect(0,0,this.width,this.height);
 
         // draw color cells
         for(i=0; i<this.scaleGradations; i++){
             x0 = this.width - this.rightGutter + this.scalePosition;
-            y0 = this.height - this.bottomGutter - i*cell;
-            poly = new Path2D();
-            poly.moveTo(x0,y0);
-            poly.lineTo(x0+this.scaleWidth,y0);
-            poly.lineTo(x0+this.scaleWidth, y0-cell);
-            poly.lineTo(x0,y0-cell);
-            poly.closePath();
+            y0 = this.height - this.bottomGutter - (i+1)*cell;
             color = this.chooseColor( (this.zmax - this.zmin)/this.scaleGradations*i + this.zmin );
-
-            this.layers[3].add(
-                new qdshape(
-                    poly, 
-                    {
-                        id: `scale${i}`,
-                        fillStyle: color
-                    }
-                )
-            )
+            this.ctx[3].fillStyle = color;
+            this.ctx[3].fillRect(x0,y0, this.scaleWidth, cell);
         }
 
         // add scale ticks
         ticks = this.chooseTicks(this.zmin, this.zmax);
+        this.ctx[3].fillStyle = '#000000';
         for(i=0; i<ticks.length; i++){
-            text = new qdtext(ticks[i], {
-                x: this.width - this.rightGutter + this.scalePosition + this.scaleWidth + 6,
-                y: this.height - this.bottomGutter - this.cellHeight*(this.ymax-this.ymin)*(ticks[i]-this.zmin)/(this.zmax-this.zmin) + 6
-            });
-
-            this.layers[3].add(text);
+            this.ctx[3].fillText(
+                ticks[i], 
+                this.width - this.rightGutter + this.scalePosition + this.scaleWidth + 6, 
+                this.height - this.bottomGutter - this.cellHeight*(this.ymax-this.ymin)*(ticks[i]-this.zmin)/(this.zmax-this.zmin) + 6
+            );
         }
 
         // add x axis ticks
         ticks = this.chooseTicks(this.xmin, this.xmax);
         for(i=0; i<ticks.length; i++){
-            text = new qdtext(ticks[i], {
-                x: this.leftGutter + this.cellWidth*(ticks[i]-this.xmin) - 6,
-                y: this.height - this.bottomGutter + 18
-            });
-
-            this.layers[3].add(text);
+            this.ctx[3].fillText(ticks[i], this.leftGutter + this.cellWidth*(ticks[i]-this.xmin) - 6, this.height - this.bottomGutter + 18)
         }      
 
         // add y axis ticks
         ticks = this.chooseTicks(this.ymin, this.ymax);
         for(i=0; i<ticks.length; i++){
-            text = new qdtext(ticks[i], {
-                x: this.leftGutter - 12,
-                y: this.height - this.bottomGutter - this.cellHeight*(ticks[i]-this.ymin) + 6
-            });
-
-            text.x = this.leftGutter - 12 - text.getTextMetric().width;
-
-            this.layers[3].add(text);
+            this.ctx[3].fillText(ticks[i], this.leftGutter - 12 - this.ctx[3].measureText(ticks[i]).width, this.height - this.bottomGutter - this.cellHeight*(ticks[i]-this.ymin) + 6)
         }        
     }
 
@@ -260,6 +246,8 @@ function heatmap(width, height){
         this.xmax = xmax;
         this.ymax = ymax;
 
+        this.drawScale();
+        this._oldraw = null; //force complete redraw
         this.drawData();
     }
 
@@ -283,7 +271,7 @@ function heatmap(width, height){
 
     this.mousedown = function(evt){
         // start a drag motion for drag-and-zoom
-        var bounds = this.qd.canvas.getBoundingClientRect(),
+        var bounds = this.canvas.getBoundingClientRect(),
             cell = this.coords2cell(evt.clientX - bounds.left, evt.clientY - bounds.top)
 
         this.zoom_x_coord_min = evt.clientX - bounds.left;
@@ -294,7 +282,7 @@ function heatmap(width, height){
 
     this.mouseup = function(evt){
         // finish a drag motion for drag-and-zoom
-        var bounds = this.qd.canvas.getBoundingClientRect(),
+        var bounds = this.canvas.getBoundingClientRect(),
             cell = this.coords2cell(evt.clientX - bounds.left, evt.clientY - bounds.top),
             buffer;
 
@@ -304,7 +292,7 @@ function heatmap(width, height){
         // clicked without drag, abandon ship
         if((this.zoom_x_min === this.zoom_x_max && this.zoom_y_min === this.zoom_y_max) || this.zoom_x_min==null || this.zoom_y_min==null){
             this.abandonZoom();
-            this.qd.render();
+            this.render();
             return;
         }
 
@@ -334,7 +322,7 @@ function heatmap(width, height){
     this.mousemove = function(evt){
         // highlight box when zoom-dragging
 
-        var bounds = this.qd.canvas.getBoundingClientRect(),
+        var bounds = this.canvas.getBoundingClientRect(),
             x0, y0, width, height,
             poly;
 
@@ -347,39 +335,30 @@ function heatmap(width, height){
         width = evt.clientX - bounds.left - this.zoom_x_coord_min;
         height = evt.clientY - bounds.top - this.zoom_y_coord_min;
 
-        this.layers[2].members = [];
-        poly = new Path2D();
-        poly.moveTo(x0,y0);
-        poly.lineTo(x0+width,y0);
-        poly.lineTo(x0+width, y0+height);
-        poly.lineTo(x0,y0+height);
-        poly.closePath();
+        this.ctx[2].clearRect(0,0,this.width,this.height);
+        this.ctx[2].fillStyle = 'rgba(142, 68, 173, 0.5)';
+        this.ctx[2].fillRect(x0, y0, width, height);
 
-        this.layers[2].add(
-            new qdshape(
-                poly, 
-                {
-                    id: 'zoomHighlight',
-                    fillStyle: 'rgba(142, 68, 173, 0.5)'
-                }
-            )
-        ) 
-
-        this.qd.render();
+        this.render();
     }
 
     this.mouseout = function(evt){
         // abandon any zoom in progress
 
         this.abandonZoom();
-        this.qd.render();
+        this.render();
     }
 
     this.dblclick = function(evt){
         // unzoom
 
+        var i;
+
         this.abandonZoom();
-        this.zoom(0,0,this._raw[0].length, this._raw.length);  
+        for(i=0;i<this.ctx.length;i++){
+            this.ctx[i].clearRect(0,0,this.width,this.height);
+        }
+        this.zoom(0,0,this._raw[0].length, this._raw.length);
     }
 
     this.abandonZoom = function(){
@@ -395,11 +374,11 @@ function heatmap(width, height){
         this.layers[2].members = [];    
     }
 
-    this.qd.canvas.onmousedown = this.mousedown.bind(this);
-    this.qd.canvas.onmouseup = this.mouseup.bind(this);
-    this.qd.canvas.onmousemove = this.mousemove.bind(this);
-    this.qd.canvas.onmouseout = this.mouseout.bind(this);
-    this.qd.canvas.ondblclick = this.dblclick.bind(this);
+    this.canvas.onmousedown = this.mousedown.bind(this);
+    this.canvas.onmouseup = this.mouseup.bind(this);
+    this.canvas.onmousemove = this.mousemove.bind(this);
+    this.canvas.onmouseout = this.mouseout.bind(this);
+    this.canvas.ondblclick = this.dblclick.bind(this);
 
     this.colorscales = {
         viridis: [ // thanks https://github.com/sjmgarnier/viridis
