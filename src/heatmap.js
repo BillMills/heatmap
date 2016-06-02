@@ -13,7 +13,7 @@ function heatmap(width, height){
     this.canvas = document.createElement('canvas') // main canvas for display
     this.canvas.width = this.width;
     this.canvas.height = this.height;
-    // hidden cnavases for compositing
+    // hidden canvases for compositing
     this.layers.push(document.createElement('canvas'));  //data
     this.layers.push(document.createElement('canvas'));  //annotation
     this.layers.push(document.createElement('canvas'));  //overlay
@@ -40,10 +40,25 @@ function heatmap(width, height){
     this.plotWidth = width - this.leftGutter - this.rightGutter;
     this.plotHeight = height - this.topGutter - this.bottomGutter;
     this.colorscale = 'viridis';
+    this.dataArea = new Path2D();              // frame around data area, helper for masking annotation layer
+    this.dataArea.moveTo(this.leftGutter, this.height-this.bottomGutter);
+    this.dataArea.lineTo(this.width - this.rightGutter, this.height-this.bottomGutter);
+    this.dataArea.lineTo(this.width - this.rightGutter, this.topGutter);
+    this.dataArea.lineTo(this.leftGutter, this.topGutter);
+    this.dataArea.closePath();
     // axes & scales
     this.scaleWidth = this.rightGutter*0.3;
     this.scalePosition = this.rightGutter*0.25;
     this.scaleGradations = 32;
+    this.xaxisTitle = '';
+    this.yaxisTitle = '';
+    this.plotTitle = '';
+    this.axisTickFontSize = 12;
+    this.axisTitleFontSize = 16;
+    this.plotTitleFontSize = 24;
+    //user-defined helper functions
+    this.preRender = function(){return 0};      // runs first in this.render()
+    this.slowDataWarning = function(state){return 0}; //user feedback when data drawing is taking a long time; state == 'on' or 'off'
 
     // special setter behavior
     Object.defineProperty(this, 'raw', 
@@ -55,10 +70,6 @@ function heatmap(width, height){
 
                     if(this.ymax == null)
                         this.dblclick() //'unzooms' to initialize ranges when data first loaded
-                    // this.xmin = 0;
-                    // this.xmax = setValue[0].length;
-                    // this.ymin = 0;
-                    // this.ymax = setValue.length;
 
                     this.drawScale();
                 }.bind(this)
@@ -89,27 +100,38 @@ function heatmap(width, height){
         //this.ctx[0].clearRect(0,0,this.width,this.height);
         this.ctx[2].clearRect(0,0,this.width,this.height);
 
-        for(i=this.ymin; i<this.ymax; i++){
-            for(j=this.xmin; j<this.xmax; j++){
-                //abort if nothing has changed
-                if(this._oldraw && (this._oldraw[i][j] === this._raw[i][j]) ) continue;
+        this.slowDataWarning('on');
 
-                // what color should this cell be?
-                color = this.chooseColor(this._raw[i][j]);
+        setTimeout(function(){
+            for(i=this.ymin; i<this.ymax; i++){
+                for(j=this.xmin; j<this.xmax; j++){
+                    //abort if nothing has changed
+                    if(this._oldraw && (this._oldraw[i][j] === this._raw[i][j]) ) continue;
 
-                // make and add the cell
-                this.ctx[0].fillStyle = color;
-                x0 = this.leftGutter + (j-this.xmin)*this.cellWidth;
-                y0 = this.height-this.bottomGutter - (i-this.ymin + 1)*this.cellHeight;
-                this.ctx[0].fillRect(x0,y0,this.cellWidth,this.cellHeight);
-            }   
-        }
+                    // what color should this cell be?
+                    color = this.chooseColor(this._raw[i][j]);
 
-        this.render();
+                    // make and add the cell
+                    this.ctx[0].fillStyle = color;
+                    this.ctx[0].strokeStyle = color;
+                    x0 = this.leftGutter + (j-this.xmin)*this.cellWidth;
+                    y0 = this.height-this.bottomGutter - (i-this.ymin + 1)*this.cellHeight;
+                    this.ctx[0].fillRect(x0,y0,this.cellWidth,this.cellHeight);
+                    this.ctx[0].strokeRect(x0,y0,this.cellWidth,this.cellHeight);
+                }   
+            }
+            this.render();
+            this.slowDataWarning('off');
+
+        }.bind(this), 1)
+
+        
     }
 
     this.render = function(){
         //composite layers and display
+
+        this.preRender();
 
         var i,
             ctx = this.canvas.getContext('2d');
@@ -125,7 +147,7 @@ function heatmap(width, height){
         // width and height maintain the proportions of number of cells in x to number of cells in y
 
         this.cellWidth = this.plotWidth / (this.xmax - this.xmin);
-        this.cellHeight = this.plotHeight / (this.ymax - this.ymin)
+        this.cellHeight = this.plotHeight / (this.ymax - this.ymin);
     }
 
     this.chooseColor = function(z){
@@ -173,6 +195,7 @@ function heatmap(width, height){
         // add scale ticks
         ticks = this.chooseTicks(this.zmin, this.zmax);
         this.ctx[3].fillStyle = '#000000';
+        this.ctx[3].font = `${this.axisTickFontSize}px sans-serif`;
         for(i=0; i<ticks.length; i++){
             this.ctx[3].fillText(
                 ticks[i], 
@@ -183,15 +206,31 @@ function heatmap(width, height){
 
         // add x axis ticks
         ticks = this.chooseTicks(this.xmin, this.xmax);
+        this.ctx[3].font = `${this.axisTickFontSize}px sans-serif`;
         for(i=0; i<ticks.length; i++){
             this.ctx[3].fillText(ticks[i], this.leftGutter + this.cellWidth*(ticks[i]-this.xmin) - 6, this.height - this.bottomGutter + 18)
-        }      
+        }
+        // x axis title
+        this.ctx[3].font = `${this.axisTitleFontSize}px sans-serif`;
+        this.ctx[3].fillText(this.xaxisTitle, this.leftGutter + (this.width-this.leftGutter-this.rightGutter)/2 - this.ctx[3].measureText(this.xaxisTitle).width/2, this.height - this.bottomGutter/2 - this.axisTitleFontSize/2);
 
         // add y axis ticks
         ticks = this.chooseTicks(this.ymin, this.ymax);
+        this.ctx[3].font = `${this.axisTickFontSize}px sans-serif` 
         for(i=0; i<ticks.length; i++){
             this.ctx[3].fillText(ticks[i], this.leftGutter - 12 - this.ctx[3].measureText(ticks[i]).width, this.height - this.bottomGutter - this.cellHeight*(ticks[i]-this.ymin) + 6)
-        }        
+        }
+        // y axis title
+        this.ctx[3].font = `${this.axisTitleFontSize}px sans-serif`;
+        this.ctx[3].save();
+        this.ctx[3].translate(this.leftGutter/2, this.topGutter + (this.height-this.topGutter-this.bottomGutter)/2 + this.ctx[3].measureText(this.yaxisTitle).width/2);
+        this.ctx[3].rotate(-Math.PI/2);
+        this.ctx[3].fillText(this.yaxisTitle, 0, -1*this.axisTitleFontSize/2);
+        this.ctx[3].restore();
+
+        // plot title
+        this.ctx[3].font = `${this.plotTitleFontSize}px sans-serif`;
+        this.ctx[3].fillText(this.plotTitle, this.leftGutter + (this.width-this.leftGutter-this.rightGutter)/2 - this.ctx[3].measureText(this.plotTitle).width/2, this.topGutter/2);
     }
 
     this.chooseTicks = function(min, max){
@@ -232,10 +271,20 @@ function heatmap(width, height){
     this.coords2cell = function(x,y){
         //convert the x,y canvas coordinates into a cell
 
-        var cell_x = Math.floor((x - this.leftGutter)/this.cellWidth),
-            cell_y = Math.floor((-1*y+this.height - this.bottomGutter)/this.cellHeight);
+        var cell_x = Math.floor((x - this.leftGutter)/this.cellWidth) + this.xmin,
+            cell_y = Math.floor((-1*y+this.height - this.bottomGutter)/this.cellHeight) + this.ymin;
 
         return {x:cell_x, y:cell_y};
+    }
+
+    this.cell2coords = function(x,y){
+        //convert bin x,y into canvas coordinates
+        //rounds to lower side of the bin.
+
+        var canvas_x = (x - this.xmin)*this.cellWidth + this.leftGutter,
+            canvas_y = -1*((y - this.ymin)*this.cellHeight + this.bottomGutter - this.height)
+
+        return {x:canvas_x, y:canvas_y};
     }
 
     this.zoom = function(xmin, ymin, xmax, ymax){
@@ -349,6 +398,23 @@ function heatmap(width, height){
         this.render();
     }
 
+    this.shiftclick = function(evt){
+        // trigger a custom event heatmap_click that users can listen for if they like; fires on shift+click
+
+        if(!evt.shiftKey) return;
+
+        var bounds = this.canvas.getBoundingClientRect(),
+            cell = this.coords2cell(evt.clientX - bounds.left, evt.clientY - bounds.top),
+            event = new CustomEvent('heatmap_shiftclick', { 'detail': 
+                {
+                    'cell': cell
+                } 
+            });
+
+        this.canvas.dispatchEvent(event); 
+
+    }
+
     this.dblclick = function(evt){
         // unzoom
 
@@ -379,6 +445,7 @@ function heatmap(width, height){
     this.canvas.onmousemove = this.mousemove.bind(this);
     this.canvas.onmouseout = this.mouseout.bind(this);
     this.canvas.ondblclick = this.dblclick.bind(this);
+    this.canvas.onclick = this.shiftclick.bind(this);
 
     this.colorscales = {
         viridis: [ // thanks https://github.com/sjmgarnier/viridis
