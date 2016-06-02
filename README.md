@@ -56,7 +56,7 @@ A working example of this basic usage can be found in `demo.html`.
 `heatmap` supports the following default mouse interactions:
 
  - click and drag to zoom to a subset of the heatmap.
- - doubleclick to zoom out to the maximum x and y ranges of the data currently found on `heatmap.raw`.
+ - doubleclick to zoom out to the maximum x and y ranges of the data currently found on `hm.raw`.
 
 Also see the customizable shift-click interaction specified above.
 
