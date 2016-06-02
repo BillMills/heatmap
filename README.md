@@ -31,23 +31,25 @@ A working example of this basic usage can be found in `demo.html`.
 
 #### Optional
 
-`heatmap` exposes a few options and features for doing fancier things:
+`heatmap` exposes a few options and features for doing fancier things. Where `hm` is your `heatmap` object like in the example above: 
 
- - **`heatmap.preRender`** can have a function assigned to it, which will be run before the final image is generated at each update.
- - **`heatmap.slowDataWarning`** can have a function assigned to it which is called twice: once before the heatmap cells are recalculated with the single argument `'on'`, and once after heatmap recalculation is complete, with the single argument `'off'`. Use this to notify the user that histogram redraw is in progress for particularly enormous histograms.
- - **An annotation layer** in the form of a canvas found on `heatmap.layers[1]`, and its corresponding 2D context at `heatmap.ctx[1]`; use this layer to add an overlay to your plot. In order to update your overlay without redrawing the data, call `heatmap.render()`.
- - **shift-click interaction.** A custom event called `'heatmap_shiftclick'` is dispatched to `heatmap.canvas` whenever the user clicks on the plot while holding shift. Add a [custom event listener](https://developer.mozilla.org/en-US/docs/Web/Guide/Events/Creating_and_triggering_events) for this event to create custom interactions with your plot. This custom event carries the following data:
+ - **`hm.preRender`** can have a function assigned to it, which will be run before the final image is generated at each update.
+ - **`hm.slowDataWarning`** can have a function assigned to it which is called twice: once before the heatmap cells are recalculated with the single argument `'on'`, and once after heatmap recalculation is complete, with the single argument `'off'`. Use this to notify the user that histogram redraw is in progress for particularly enormous histograms.
+ - **An annotation layer** in the form of a canvas found on `hm.layers[1]`, and its corresponding 2D context at `hm.ctx[1]`; use this layer to add an overlay to your plot. In order to update your overlay without redrawing the data, call `hm.render()`.
+ - **shift-click interaction.** A custom event called `'heatmap_shiftclick'` is dispatched to `hm.canvas` whenever the user clicks on the plot while holding shift. Add a [custom event listener](https://developer.mozilla.org/en-US/docs/Web/Guide/Events/Creating_and_triggering_events) for this event to create custom interactions with your plot. This custom event carries the following data:
+
  ```
  event.detail = {
     cell: {x: x_bin, y: y_bin}
  }
  ```
+
  where `x_bin` and `y_bin` are the bin numbers clicked on in x and y respectively.
  - **Labels and titles** can be assigned to the following keys:
-   - `heatmap.plotTitle`: appears at the top of the plot
-   - `heatmap.xaxisTitle`: label for x axis
-   - `heatmap.yaxisTitle`: label for y axis
- - **heatmap.zoom(xmin, ymin, xmax, ymax)** will zoom the plot to the specifiex x and y ranges.
+   - `hm.plotTitle`: appears at the top of the plot
+   - `hm.xaxisTitle`: label for x axis
+   - `hm.yaxisTitle`: label for y axis
+ - **hm.zoom(xmin, ymin, xmax, ymax)** will zoom the plot to the specified x and y ranges.
 
 #### Interactions
 
